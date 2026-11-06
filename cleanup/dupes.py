@@ -8,7 +8,9 @@ from collections import defaultdict
 
 from .core import finding, walk
 
-SKIP = {".git", "node_modules", "__pycache__", "site-packages", ".venv", "venv", "$RECYCLE.BIN", ".Trash"}
+SKIP = {".git", "node_modules", "__pycache__", "site-packages", ".venv", "venv", ".Trash", "Library"}
+# 사진/음악 라이브러리 패키지 내부는 앱이 관리하므로 건드리지 않는다
+SKIP_SUFFIX = (".photoslibrary", ".musiclibrary", ".app", ".imovielibrary", ".fcpbundle")
 _COPY = re.compile(r"(\(\d+\)|\bcopy\b|복사|사본|_\d+$| - copy)", re.I)
 
 
@@ -38,7 +40,7 @@ def scan_dupes(roots, min_kb=10, progress=None):
     for root in roots:
         if not os.path.isdir(root):
             continue
-        for item in walk(root, prune=lambda n, p: n in SKIP, progress=progress):
+        for item in walk(root, prune=lambda n, p: n in SKIP or n.endswith(SKIP_SUFFIX), progress=progress):
             if item[0] != "file":
                 continue
             _, path, st = item

@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import os
+import plistlib
 import re
 import stat
 import sys
 
 from .core import finding, walk
 
-SKIP = {".git", "node_modules", "site-packages", "__pycache__", ".venv", "venv", "Library", "AppData"}
+SKIP = {".git", "node_modules", "site-packages", "__pycache__", ".venv", "venv", "Library", ".Trash"}
 SECRET_PATTERNS = [
     ("AWS 액세스 키", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("Anthropic API 키", re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")),
@@ -19,18 +20,45 @@ SECRET_PATTERNS = [
     ("개인 키(PEM)", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----")),
 ]
 TEXT_EXT = {".env", ".json", ".txt", ".md", ".py", ".js", ".ts", ".yml", ".yaml", ".toml", ".cfg", ".ini",
-            ".sh", ".conf", ".properties", ".bat", ".ps1", ""}
+            ".sh", ".conf", ".properties", ".bat", ""}
 RISKY_NAMES = {".env", "id_rsa", "id_ed25519", "id_ecdsa", "credentials", "credentials.json", ".npmrc",
                ".pypirc", ".netrc", "secrets.json", "service-account.json"}
 RISKY_EXT = {".pem", ".key", ".p12", ".pfx", ".ppk"}
-EXEC_EXT = {".exe", ".msi", ".bat", ".cmd", ".ps1", ".scr", ".vbs", ".jar", ".apk", ".dmg", ".pkg",
-            ".command", ".appimage", ".deb", ".rpm"}
+EXEC_EXT = {".dmg", ".pkg", ".command", ".sh", ".app", ".jar", ".scpt", ".workflow", ".exe", ".msi", ".bat"}
 DOC_EXT = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png", ".txt", ".mp3", ".mp4", ".zip"}
-EXPOSED_DIRS = ("downloads", "desktop", "documents", "다운로드", "바탕 화면", "문서")
+EXPOSED_DIRS = ("downloads", "desktop", "documents")
 
 
 def _mask(s: str) -> str:
     return s[:4] + "…" + s[-2:] if len(s) > 8 else "…"
+
+
+def _launch_agents(start_id):
+    """~/Library/LaunchAgents: 로그인 때 자동 실행되도록 등록된 항목. 실행 파일이 없거나 임시/다운로드 폴더에 있으면 의심."""
+    out, fid = [], start_id
+    d = os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents")
+    if not os.path.isdir(d):
+        return out
+    for fn in sorted(os.listdir(d)):
+        p = os.path.join(d, fn)
+        if not fn.endswith(".plist") or not os.path.isfile(p):
+            continue
+        try:
+            with open(p, "rb") as f:
+                pl = plistlib.load(f)
+        except Exception:
+            continue
+        prog = pl.get("Program") or (pl.get("ProgramArguments") or [""])[0]
+        why = None
+        if prog and not os.path.exists(prog):
+            why = f"자동 실행 등록은 남아 있는데 실행 파일이 없음 ({prog}) — 지운 앱의 잔재일 가능성"
+        elif prog and any(x in prog for x in ("/tmp/", "/Downloads/", "/private/var/")):
+            why = f"임시/다운로드 폴더의 프로그램을 자동 실행하도록 등록됨 ({prog}) — 출처 확인 필요"
+        if why:
+            st = os.lstat(p)
+            fid += 1
+            out.append(finding(fid, p, st.st_size, "launch_agent", why, "review", st.st_mtime, False))
+    return out
 
 
 def scan_security(roots, installer_days=30, progress=None):
@@ -84,6 +112,7 @@ def scan_security(roots, installer_days=30, progress=None):
                 from .core import age_days
                 if age_days(st.st_mtime) >= installer_days:
                     add(path, st, "installer", f"{age_days(st.st_mtime)}일 전에 받은 설치/실행 파일이 남아 있음 (이미 설치했다면 삭제해도 됨)")
-    items.sort(key=lambda r: ({"disguised": 0, "leaked_key": 1, "secret_file": 2}.get(r["kind"], 3), -r["size"]))
+    items.extend(_launch_agents(fid))
+    items.sort(key=lambda r: ({"disguised": 0, "leaked_key": 1, "launch_agent": 2, "secret_file": 3}.get(r["kind"], 3), -r["size"]))
     return {"items": items, "notes": ["이 탭은 안티바이러스가 아닙니다. 규칙에 걸린 '후보'만 보여주며 오탐이 있을 수 있습니다.",
                                       "키 문자열은 일부만 가려서 표시하며 어디에도 전송·저장하지 않습니다."]}

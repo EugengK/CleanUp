@@ -18,10 +18,14 @@ GLOBAL = [
     (".cache/huggingface", "HuggingFace 모델 캐시 (용량 큼)"), (".cache/torch", "PyTorch 모델 캐시"),
     (".cache/pip", "pip 다운로드 캐시"), (".cache/uv", "uv 캐시"), (".npm/_cacache", "npm 캐시"),
     (".npm/_npx", "npx 임시 설치"), (".bun/install/cache", "bun 캐시"),
-    ("AppData/Roaming/Claude", "Claude 데스크톱 앱 데이터"), ("AppData/Local/Programs/cursor", "Cursor 설치"),
-    ("Library/Application Support/Claude", "Claude 데스크톱 앱 데이터"),
+    ("Library/Caches/pip", "pip 캐시"), ("Library/Caches/Homebrew", "Homebrew 다운로드 캐시 (brew cleanup 으로도 정리 가능)"),
+    ("Library/Developer/Xcode/DerivedData", "Xcode 빌드 캐시 (지워도 다시 생성됨)"),
+    ("Library/Developer/Xcode/iOS DeviceSupport", "Xcode 기기 지원 파일 (용량 큼)"),
+    ("Library/Developer/CoreSimulator", "iOS 시뮬레이터 데이터 (용량 큼)"),
+    ("Library/Application Support/Claude", "Claude 데스크톱 앱 데이터 (사용 중이면 유지)"),
     ("Library/Application Support/Cursor", "Cursor 앱 데이터"),
-    ("Library/Caches/pip", "pip 캐시"),
+    ("Library/Application Support/Code/CachedExtensionVSIXs", "VS Code 확장 설치 캐시"),
+    ("Library/Application Support/Windsurf", "Windsurf 앱 데이터"),
 ]
 # 프로젝트 안에서 찾을 AI 흔적 (이름 → 설명)
 PROJECT_MARKERS = {".claude": "프로젝트별 Claude Code 설정", "CLAUDE.md": "Claude 지침 파일",
@@ -30,7 +34,7 @@ PROJECT_MARKERS = {".claude": "프로젝트별 Claude Code 설정", "CLAUDE.md":
                    ".windsurf": "Windsurf 설정", ".continue": "Continue 설정",
                    ".aider.chat.history.md": "Aider 대화기록", ".aider.input.history": "Aider 입력기록"}
 PROJECT_FILES = {"package.json", "pyproject.toml", "requirements.txt", "Cargo.toml", "go.mod", "pom.xml"}
-SKIP = {"node_modules", ".venv", "venv", "site-packages", "__pycache__", "Library", "AppData", ".Trash"}
+SKIP = {"node_modules", ".venv", "venv", "site-packages", "__pycache__", "Library", ".Trash"}
 
 
 def scan_footprints(roots, stale_days=180, max_depth=6, progress=None):

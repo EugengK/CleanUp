@@ -2,17 +2,14 @@
 from __future__ import annotations
 
 import os
-import sys
 import time
 from pathlib import Path
 
 NOW = time.time
 
-# 정리 대상이 될 수 없는 시스템 경로 (홈 폴더 밖에서만 의미가 있음)
-_POSIX_SYSTEM = ("/bin", "/sbin", "/usr", "/etc", "/lib", "/lib64", "/boot", "/dev", "/proc", "/sys",
-                 "/var", "/opt", "/System", "/Library", "/Applications", "/private")
-_WIN_SYSTEM = {"windows", "program files", "program files (x86)", "programdata", "$recycle.bin",
-               "system volume information"}
+# 정리 대상이 될 수 없는 macOS 시스템 경로 (홈 폴더 밖)
+_SYSTEM = ("/bin", "/sbin", "/usr", "/etc", "/System", "/Library", "/Applications", "/private",
+           "/var", "/opt", "/cores", "/dev", "/Volumes/Macintosh HD")
 
 
 def human(n: float) -> str:
@@ -28,18 +25,17 @@ def home() -> Path:
 
 
 def is_protected(path: str | os.PathLike) -> bool:
-    """홈 폴더 자체·홈의 상위·드라이브 루트·OS 시스템 폴더는 정리 대상이 될 수 없다."""
+    """홈 폴더 자체·홈의 상위·루트·macOS 시스템 폴더·홈 바로 아래 핵심 폴더는 정리 대상이 될 수 없다."""
     p = Path(os.path.abspath(path))
     h = Path(os.path.abspath(home()))
     if p == h or p in h.parents or p.parent == p:
         return True
     if h in p.parents:
-        return False  # 홈 안쪽은 허용
-    if sys.platform == "win32":
-        parts = [x.lower() for x in p.parts]
-        return len(parts) >= 2 and parts[1] in _WIN_SYSTEM
+        # ~/Library, ~/Documents 같은 최상위 폴더 자체는 통째로 못 옮기게 막는다 (하위 항목만 허용)
+        return p.parent == h and p.name in {"Library", "Documents", "Desktop", "Downloads", "Pictures",
+                                            "Movies", "Music", "Public", "Applications"}
     s = str(p)
-    return any(s == x or s.startswith(x + "/") for x in _POSIX_SYSTEM)
+    return any(s == x or s.startswith(x + "/") for x in _SYSTEM)
 
 
 def safe_stat(path: str | os.PathLike):
@@ -105,8 +101,8 @@ def walk(root: str, prune=None, progress: dict | None = None):
 
 def default_roots() -> list[str]:
     h = home()
-    names = ["Downloads", "Desktop", "Documents", "Pictures", "Videos", "Movies", "Music",
-             "Projects", "dev", "Code", "source", "repos", "workspace"]
+    names = ["Downloads", "Desktop", "Documents", "Pictures", "Movies", "Music", "Projects", "dev",
+             "Developer", "Code", "repos", "workspace"]
     out = [str(h / n) for n in names if (h / n).is_dir()]
     return out or [str(h)]
 

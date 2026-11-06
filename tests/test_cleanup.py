@@ -102,3 +102,19 @@ def test_is_protected(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     assert is_protected(tmp_path) and is_protected("/") and is_protected("/usr/lib")
     assert not is_protected(tmp_path / "Downloads" / "a.txt")
+
+
+def test_launch_agent_orphan(tmp_path, monkeypatch):
+    import plistlib
+    monkeypatch.setenv("HOME", str(tmp_path))
+    d = tmp_path / "Library" / "LaunchAgents"; d.mkdir(parents=True)
+    (d / "com.gone.app.plist").write_bytes(plistlib.dumps({"Label": "x", "ProgramArguments": ["/Applications/Gone.app/run"]}))
+    r = security.scan_security([str(tmp_path / "Downloads")])
+    assert [i["kind"] for i in r["items"]] == ["launch_agent"]
+
+
+def test_mac_top_level_dirs_protected(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert is_protected(tmp_path / "Library") and is_protected(tmp_path / "Documents")
+    assert not is_protected(tmp_path / "Library" / "Caches" / "pip")
+    assert is_protected("/Applications/Safari.app") and is_protected("/System/Library")

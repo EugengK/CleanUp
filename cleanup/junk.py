@@ -13,8 +13,8 @@ REBUILD_DIRS = {"node_modules": "npm install 로 다시 만들 수 있음",
                 ".venv": "가상환경, 다시 만들 수 있음", "venv": "가상환경, 다시 만들 수 있음",
                 ".next": "빌드 캐시", ".nuxt": "빌드 캐시", ".parcel-cache": "빌드 캐시",
                 ".turbo": "빌드 캐시"}
-TEMP_FILES = ["Thumbs.db", ".DS_Store", "desktop.ini", "*.tmp", "*.crdownload", "*.swp", "~$*",
-              "*.pyc", "*.part"]
+TEMP_FILES = [".DS_Store", "*.tmp", "*.crdownload", "*.swp", "~$*",
+              "*.pyc", "*.part", "._*"]
 BACKUP_FILES = ["*.bak", "*.orig", "*.old", "*~"]
 # AI 도구가 흔히 남기는 문서의 이름 특징. 설정 파일(CLAUDE.md 등)과 일반 문서는 제외.
 KEEP_MD = {"README", "LICENSE", "CONTRIBUTING", "CHANGELOG", "CLAUDE", "AGENTS", "GEMINI",
@@ -22,7 +22,7 @@ KEEP_MD = {"README", "LICENSE", "CONTRIBUTING", "CHANGELOG", "CLAUDE", "AGENTS",
 _CAPS_SNAKE = re.compile(r"^[A-Z0-9]+(?:[_-][A-Z0-9]+)+$")
 _KEYWORDS = re.compile(r"(summary|report|plan|analysis|notes|status|complete|implementation|"
                        r"walkthrough|scratch|handoff|session|debug|fixes?)", re.I)
-SKIP_DIRS = {".git", "site-packages", "Library", "AppData", ".Trash", "$RECYCLE.BIN"}
+SKIP_DIRS = {".git", "site-packages", "Library", ".Trash", "Photos Library.photoslibrary"}
 
 
 def _match(name: str, patterns) -> bool:
