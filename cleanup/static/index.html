@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CleanUp</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--mut:#6b7385;--line:#e3e6ec;--acc:#2f6fed;--ok:#1a8f4c;--warn:#b7791f;--bad:#c53030}
+@media(prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1c2029;--fg:#e6e9f0;--mut:#8f98ab;--line:#2c3240;--acc:#6b9bff;--ok:#4cc58a;--warn:#e0a84a;--bad:#ef7373}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--card);display:flex;gap:12px;align-items:baseline}
+header h1{margin:0;font-size:18px}header span{color:var(--mut)}
+nav{display:flex;gap:4px;padding:10px 20px 0;flex-wrap:wrap}
+nav button{border:1px solid var(--line);border-bottom:none;background:transparent;color:var(--mut);padding:8px 14px;border-radius:8px 8px 0 0;cursor:pointer;font:inherit}
+nav button.on{background:var(--card);color:var(--fg);font-weight:600}
+main{background:var(--card);margin:0 20px 20px;border:1px solid var(--line);border-radius:0 8px 8px 8px;padding:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+input[type=text],input[type=number]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+input.roots{flex:1;min-width:280px}
+button.b{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;font:inherit}
+button.b.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}button.b.danger{background:var(--bad)}button.b:disabled{opacity:.5;cursor:default}
+.note{color:var(--mut);font-size:13px;margin:4px 0}.sum{font-weight:600;margin:8px 0}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:500;font-size:12px}td.p{word-break:break-all}td.n{white-space:nowrap;text-align:right}
+.tag{font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--line);white-space:nowrap}
+.tag.safe{color:var(--ok);border-color:var(--ok)}.tag.review{color:var(--warn);border-color:var(--warn)}.tag.info{color:var(--mut)}
+.why{color:var(--mut);font-size:12px}.grp td{background:var(--bg);font-weight:600}
+.warnbox{background:var(--bg);border-left:3px solid var(--warn);padding:8px 12px;margin:8px 0;border-radius:4px;font-size:13px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;display:none}
+</style></head><body>
+<header><h1>🧹 CleanUp</h1><span>삭제는 항상 "격리함"으로 이동 → 언제든 복원 가능</span></header>
+<nav id="nav"></nav>
+<main id="main"></main><div id="toast"></div>
+<script>
+const TOKEN="__TOKEN__";
+const TABS=[
+ {id:"junk",t:"불필요 파일",d:"캐시·임시·백업·로그, 재설치 가능한 폴더, AI가 남긴 보고서성 .md, 오래 안 쓴 큰 파일",
+  p:[["stale_days","오래됨 기준(일)",180],["min_stale_mb","큰 파일 기준(MB)",5]]},
+ {id:"dupes",t:"중복 파일",d:"내용이 완전히 같은 파일(SHA-256 확인). 각 묶음의 '보관 추천' 1개는 남기고 나머지만 선택됩니다.",p:[["min_kb","최소 크기(KB)",10]]},
+ {id:"footprints",t:"AI 흔적",d:"AI 도구가 홈 폴더와 프로젝트 곳곳에 남긴 설정·기록·모델·캐시와, AI를 쓴 프로젝트 폴더",p:[["stale_days","오래됨 기준(일)",180]]},
+ {id:"apps",t:"안 쓰는 앱",d:"설치된 앱과 마지막 사용 추정. 목록만 제공하며 제거는 직접 하셔야 합니다.",p:[["unused_days","미사용 기준(일)",180]],noroots:true},
+ {id:"security",t:"보안 점검",d:"키 유출 의심 문자열, 비밀 파일, 위장 실행파일, 방치된 설치파일 — 백신이 아닌 규칙 기반 후보",p:[]},
+ {id:"quarantine",t:"격리함"}];
+const S={tab:"junk",roots:[],res:{},job:{},sel:{}};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"X-Token":TOKEN,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+ const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
+function toast(m){const t=$("#toast");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",4000)}
+function nav(){$("#nav").innerHTML=TABS.map(t=>`<button class="${t.id===S.tab?"on":""}" onclick="go('${t.id}')">${t.t}</button>`).join("")}
+function go(id){S.tab=id;nav();render()}
+function render(){const t=TABS.find(x=>x.id===S.tab);if(t.id==="quarantine")return renderQ();
+ let h=`<p class="note">${t.d}</p>`;
+ if(!t.noroots)h+=`<div class="row"><label>검사할 폴더(쉼표로 구분)</label><input type="text" class="roots" id="roots" value="${esc(S.roots.join(", "))}"></div>`;
+ h+=`<div class="row">`+t.p.map(([k,l,v])=>`<label>${l} <input type="number" id="p_${k}" value="${v}" style="width:80px"></label>`).join("")+
+  `<button class="b" id="scanbtn" onclick="scan()">검사 시작</button><span id="prog" class="note"></span></div><div id="out"></div>`;
+ $("#main").innerHTML=h;if(S.res[S.tab])show();}
+async function scan(){const t=TABS.find(x=>x.id===S.tab),kind=t.id;
+ const params={};t.p.forEach(([k])=>params[k]=+$("#p_"+k).value);
+ const rootsEl=$("#roots");if(rootsEl)S.roots=rootsEl.value.split(",").map(s=>s.trim()).filter(Boolean);
+ $("#scanbtn").disabled=true;$("#out").innerHTML="";
+ const {job}=await api("/api/scan",{kind,roots:S.roots,params});S.job[kind]=job;
+ const iv=setInterval(async()=>{try{const j=await api("/api/job?id="+job);
+  if(S.tab===kind&&$("#prog"))$("#prog").textContent=j.state==="running"?`검사 중… ${j.progress.files||0}개 파일 · ${(j.progress.dir||"").slice(-60)}`:"";
+  if(j.state!=="running"){clearInterval(iv);if($("#scanbtn")&&S.tab===kind)$("#scanbtn").disabled=false;
+   if(j.state==="error")return toast("오류: "+j.error);S.res[kind]=j.result;S.sel[kind]=new Set();
+   (j.result.items).forEach(i=>{if(i.confidence==="safe"||(kind==="dupes"&&!i.keep))S.sel[kind].add(i.id)});
+   if(S.tab===kind)show();}}catch(e){clearInterval(iv);toast(e.message)}},700)}
+function row(i,k){const dis=(k==="apps")?"disabled":"";
+ return `<tr><td><input type="checkbox" ${dis} ${S.sel[k].has(i.id)?"checked":""} onchange="tog(${i.id},this.checked)"></td>
+ <td class="p">${esc(i.label||i.path)}${i.label?`<div class="why">${esc(i.path)}</div>`:""}<div class="why">${esc(i.reason)}</div></td>
+ <td><span class="tag ${i.confidence}">${{safe:"안전",review:"확인 필요",info:"참고"}[i.confidence]}</span></td>
+ <td class="n">${i.size?i.size_h:"-"}</td><td class="n">${i.mtime?i.age_days+"일 전":"-"}</td></tr>`}
+function show(){const k=S.tab,r=S.res[k];if(!r||!$("#out"))return;let h="";
+ (r.notes||[]).forEach(n=>h+=`<div class="warnbox">${esc(n)}</div>`);
+ h+=`<div class="sum">${r.items.length}건 · ${k==="dupes"?"중복으로 낭비 중: "+r.wasted_h:"합계 "+r.total_h}</div>`;
+ if(k!=="apps")h+=`<div class="row"><button class="b danger" onclick="doTrash()">선택 항목 격리함으로 이동 (<span id="cnt">${S.sel[k].size}</span>)</button>
+  <button class="b sec" onclick="selAll(true)">전체 선택</button><button class="b sec" onclick="selAll(false)">선택 해제</button></div>`;
+ h+=`<table><tr><th></th><th>경로 / 이유</th><th>판단</th><th>크기</th><th>최근 변경</th></tr>`;
+ if(k==="dupes"){const by=Object.fromEntries(r.items.map(i=>[i.id,i]));
+  r.groups.forEach(g=>{h+=`<tr class="grp"><td colspan="5">같은 파일 ${g.ids.length}개 · 각 ${r.items.find(i=>i.id===g.ids[0]).size_h} · 낭비 ${(g.wasted/1048576).toFixed(1)} MB</td></tr>`;g.ids.forEach(id=>h+=row(by[id],k))})}
+ else r.items.forEach(i=>h+=row(i,k));
+ $("#out").innerHTML=h+"</table>"}
+function tog(id,on){const s=S.sel[S.tab];on?s.add(id):s.delete(id);$("#cnt").textContent=s.size}
+function selAll(on){const k=S.tab;S.sel[k]=new Set(on?S.res[k].items.filter(i=>!(k==="dupes"&&i.keep)).map(i=>i.id):[]);show()}
+async function doTrash(){const k=S.tab,ids=[...S.sel[k]];if(!ids.length)return toast("선택된 항목이 없습니다");
+ if(!confirm(`${ids.length}개 항목을 격리함으로 옮깁니다.\n(영구 삭제가 아니며 '격리함' 탭에서 복원할 수 있습니다)`))return;
+ try{const r=await api("/api/trash",{job:S.job[k],ids});
+  toast(`${r.moved}개 이동 · 확보 ${(r.bytes/1048576).toFixed(1)} MB`+(r.errors.length?` · 실패 ${r.errors.length}`:""));
+  const gone=new Set(ids);S.res[k].items=S.res[k].items.filter(i=>!(gone.has(i.id)&&!r.errors.some(e=>e.path===i.path)));
+  S.sel[k]=new Set();show()}catch(e){toast(e.message)}}
+async function renderQ(){const {batches}=await api("/api/quarantine");
+ let h=`<p class="note">격리된 항목은 여기에 보관됩니다. '복원'하면 원래 위치로 돌아가고, '영구 삭제'해야 디스크 공간이 실제로 확보됩니다.</p>`;
+ if(!batches.length)h+=`<p>격리함이 비어 있습니다.</p>`;
+ else h+=`<table><tr><th>일시</th><th>항목</th><th>크기</th><th></th></tr>`+batches.map(b=>`<tr><td>${new Date(b.created*1000).toLocaleString()}</td>
+  <td class="p">${b.count}개<div class="why">${b.sample.map(esc).join("<br>")}</div></td><td class="n">${b.size_h}</td>
+  <td class="n"><button class="b sec" onclick="qa('restore','${b.batch}')">복원</button> <button class="b danger" onclick="qa('purge','${b.batch}')">영구 삭제</button></td></tr>`).join("")+"</table>";
+ $("#main").innerHTML=h}
+async function qa(a,b){if(a==="purge"&&!confirm("영구 삭제하면 되돌릴 수 없습니다. 계속할까요?"))return;
+ try{const r=await api("/api/"+a,{batch:b});toast(a==="restore"?`${r.restored}개 복원`+(r.errors.length?` · 실패 ${r.errors.length}: ${r.errors[0].error}`:""):"영구 삭제됨");renderQ()}catch(e){toast(e.message)}}
+api("/api/defaults").then(d=>{S.roots=d.roots;nav();render()});
+</script></body></html>
